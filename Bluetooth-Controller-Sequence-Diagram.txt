@@ -1,12 +1,18 @@
 Copy and paste this code into sequencediagram.org
 
-title Manual Motor Control (Bluetooth)
+@startuml Motor Control Sequence
+
+title Automated Conveyor System with Color Detection & Sorting
 
 actor "User" as U
 participant "Bluetooth Controller" as BC
 participant "Raspberry Pi 5 (System Core)" as RPi
+participant "Color Sensor" as CS
 participant "Motor Driver HAT/Board" as Driver
 database "DC/Gear Motors\n& Servos" as Motors
+participant "Conveyor Belt Motor" as Conveyor
+participant "Sorting Arm Motor" as Sorter
+participant "Deposit Motor" as Deposit
 
 == System Initialization ==
 
@@ -18,34 +24,111 @@ BC -> RPi: Notify: Connection Ready
 RPi -> Driver: Initialize PWM Channels(freq=50Hz)
 activate Driver
 Driver -> Motors: Power-on Check (Blink/Twitch)
+RPi -> CS: Initialize Color Sensor(I2C)
+activate CS
+CS -> RPi: Sensor Ready
+deactivate CS
 deactivate Driver
 deactivate BC
 
-== Control Loop: Continuous Input ==
+== Manual Control Mode ==
 
 loop Read Controller Inputs (20ms Interval)
 U -> BC: Move Joystick / Press Button (e.g., Forward)
-BC -> RPi: Transmit Controller State (speed_X, arm_Y, button_A)
+BC -> RPi: Transmit Controller State (speed_X, arm_Y, button_A, button_B, button_C)
 
 alt if movement input is non-zero
     RPi -> RPi: Calculate Target PWM Value\n(based on speed_X)
     RPi -> Driver: Set Motor PWM (Value_Drive_L, Value_Drive_R)
     activate Driver
-    Driver -> Motors: Apply Power to Drive Motors (Move Forward)
+    Driver -> Conveyor: Apply Power to Conveyor Motor
+    
 else if button_A is pressed (Arm Control)
     RPi -> RPi: Calculate Target Angle (Arm_Servo)
     RPi -> Driver: Set Servo PWM (Angle_Arm)
     activate Driver
-    Driver -> Motors: Set Arm Servo Position
+    Driver -> Sorter: Set Sorting Arm Position
+    
+else if button_B is pressed (Deposit Storage 1)
+    RPi -> RPi: Set Deposit Motor to Positive Power\n(Clockwise - Storage 1 Object)
+    RPi -> Driver: Set Deposit Motor PWM (+Value)
+    activate Driver
+    Driver -> Deposit: Spin Clockwise (Deposit Object from Storage 1)
+    RPi -> RPi: Delay 1 second (Allow deposit completion)
+    RPi -> Driver: Set Deposit Motor PWM (Zero - Stop)
+    Driver -> Deposit: Stop Deposit Motor
+    
+else if button_C is pressed (Deposit Storage 2)
+    RPi -> RPi: Set Deposit Motor to Negative Power\n(Counterclockwise - Storage 2 Object)
+    RPi -> Driver: Set Deposit Motor PWM (-Value)
+    activate Driver
+    Driver -> Deposit: Spin Counterclockwise (Deposit Object from Storage 2)
+    RPi -> RPi: Delay 1 second (Allow deposit completion)
+    RPi -> Driver: Set Deposit Motor PWM (Zero - Stop)
+    Driver -> Deposit: Stop Deposit Motor
+    
 else
     RPi -> Driver: Set All PWM to Zero (Stop)
     activate Driver
-    Driver -> Motors: Stop All Motors
+    Driver -> Conveyor: Stop Conveyor Belt
 end
-
-Driver --> RPi: Acknowledge Command (Optional)
+Driver --> RPi: Acknowledge Command
 deactivate Driver
-
-
 end
+
+== Automated Detection & Sorting ==
+
+loop Continuous Color Monitoring (50ms Interval)
+RPi -> CS: Read HSV Color Values()
+activate CS
+CS -> RPi: Return HSV (Hue, Saturation, Value)
+
+alt if Object Detected (HSV within object range)
+    RPi -> Driver: Set Conveyor PWM to Zero (Stop Belt)
+    activate Driver
+    Driver -> Conveyor: Stop Conveyor Belt
+    
+    RPi -> RPi: Analyze HSV against Target Value\n(Target_HSV = [correctvalue])
+    
+    alt if HSV matches Target_HSV (Good Object)
+        RPi -> Driver: Resume Conveyor PWM (Continue)
+        Driver -> Conveyor: Continue Conveyor Belt
+        RPi -> RPi: Log "Object Passed - Correct Color"
+    
+    else if HSV does NOT match (Reject Object)
+        RPi -> Driver: Activate Sorting Arm PWM (Push Angle)
+        Driver -> Sorter: Extend Sorting Arm to Push Object
+        RPi -> RPi: Delay 2 seconds (Allow push completion)
+        RPi -> Driver: Retract Sorting Arm PWM (Home Position)
+        Driver -> Sorter: Retract Sorting Arm to Home
+        RPi -> Driver: Resume Conveyor PWM (Continue)
+        Driver -> Conveyor: Continue Conveyor Belt
+        RPi -> RPi: Log "Object Rejected - Wrong Color"
+    end
+    
+    deactivate Driver
+    
+else if No Object Detected
+    RPi -> RPi: Continue Normal Operation
+    note right RPi: Conveyor keeps running\nor waits for manual input
+end
+
+deactivate CS
+end
+
+== Emergency Stop & Manual Override ==
+
+U -> BC: Press Emergency Stop Button
+BC -> RPi: Transmit Emergency Stop Signal
+RPi -> Driver: Set All PWM to Zero (Immediate Stop)
+activate Driver
+Driver -> Conveyor: Emergency Stop Conveyor
+Driver -> Sorter: Stop All Sorting Operations
+Driver -> Deposit: Stop Deposit Motor Immediately
+deactivate Driver
+RPi -> RPi: Log "Emergency Stop Activated"
+
+@enduml
+
+
 

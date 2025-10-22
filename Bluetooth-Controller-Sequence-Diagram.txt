@@ -1,7 +1,5 @@
 Copy and paste this code into sequencediagram.org
 
-@startuml Motor Control Sequence
-
 title Manual Motor Control (Bluetooth)
 
 actor "User" as U
@@ -51,4 +49,3 @@ deactivate Driver
 
 end
 
-@enduml

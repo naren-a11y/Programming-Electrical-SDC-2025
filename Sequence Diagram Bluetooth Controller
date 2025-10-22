@@ -1,0 +1,54 @@
+Copy and paste this code into sequencediagram.org
+
+@startuml Motor Control Sequence
+
+title Manual Motor Control (Bluetooth)
+
+actor "User" as U
+participant "Bluetooth Controller" as BC
+participant "Raspberry Pi 5 (System Core)" as RPi
+participant "Motor Driver HAT/Board" as Driver
+database "DC/Gear Motors\n& Servos" as Motors
+
+== System Initialization ==
+
+U -> RPi: Start System / Power On
+activate RPi
+RPi -> BC: Establish Bluetooth Connection()
+activate BC
+BC -> RPi: Notify: Connection Ready
+RPi -> Driver: Initialize PWM Channels(freq=50Hz)
+activate Driver
+Driver -> Motors: Power-on Check (Blink/Twitch)
+deactivate Driver
+deactivate BC
+
+== Control Loop: Continuous Input ==
+
+loop Read Controller Inputs (20ms Interval)
+U -> BC: Move Joystick / Press Button (e.g., Forward)
+BC -> RPi: Transmit Controller State (speed_X, arm_Y, button_A)
+
+alt if movement input is non-zero
+    RPi -> RPi: Calculate Target PWM Value\n(based on speed_X)
+    RPi -> Driver: Set Motor PWM (Value_Drive_L, Value_Drive_R)
+    activate Driver
+    Driver -> Motors: Apply Power to Drive Motors (Move Forward)
+else if button_A is pressed (Arm Control)
+    RPi -> RPi: Calculate Target Angle (Arm_Servo)
+    RPi -> Driver: Set Servo PWM (Angle_Arm)
+    activate Driver
+    Driver -> Motors: Set Arm Servo Position
+else
+    RPi -> Driver: Set All PWM to Zero (Stop)
+    activate Driver
+    Driver -> Motors: Stop All Motors
+end
+
+Driver --> RPi: Acknowledge Command (Optional)
+deactivate Driver
+
+
+end
+
+@enduml

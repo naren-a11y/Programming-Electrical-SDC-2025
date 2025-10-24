@@ -1,7 +1,5 @@
 Copy and paste this code into sequencediagram.org
 
-@startuml Motor Control Sequence
-
 title Automated Conveyor System with Color Detection & Sorting
 
 actor "User" as U
@@ -128,7 +126,6 @@ Driver -> Deposit: Stop Deposit Motor Immediately
 deactivate Driver
 RPi -> RPi: Log "Emergency Stop Activated"
 
-@enduml
 
 
 
